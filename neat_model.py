@@ -95,13 +95,15 @@ import pandas as pd
 
 grid_size = 6
 results = {'generation':[], 'robot':[],'distance':[], 'structure':[]}
-generations = 0
+# generations = 0
 def eval_genomes(genomes, config):
     global generations, results
     # results = {'generation':[], 'robot':[],'distance':[]}
-    generations += 1
+
 
     for genome_id, genome in genomes:
+        generations = p.generation
+        individual_id = genome_id
         genome.fitness = 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
 
@@ -109,10 +111,10 @@ def eval_genomes(genomes, config):
         robot_structure = []
 
         # Activate the network for each voxel
-        for x in range(grid_size):
+        for z in range(grid_size):
             for y in range(grid_size):
-                for z in range(grid_size):
-                    output = net.activate((y,x,z))
+                for x in range(grid_size):
+                    output = net.activate((x,y,z))
                     material = np.argmax(output)
                     robot_structure.append(material)
                     # print(material)
@@ -124,15 +126,15 @@ def eval_genomes(genomes, config):
 
         # NOW WRITE .VXA FILE AND RUN SIM
         # generations = 0
-        individual_id = 1
+ 
 
         # vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{generations}_id_{individual_id}.vxa"
 
         # create .vxa file for simulator
         vxa_file = write_voxelyze_file(sim, 
                             env, 
-                            generations = generations, 
-                            individual_id = individual_id, 
+                            generations = p.generation, 
+                            individual_id = genome_id, 
                             candidate_design = candidate_design,
                             im_size = grid_size, 
                             run_directory = run_directory,
@@ -140,17 +142,17 @@ def eval_genomes(genomes, config):
                             material_list = material_list)
         
         
-        vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{generations}_id_{individual_id}.vxa"
+        vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{p.generation}_id_{genome_id}.vxa"
 
 
         # run physics simulator
         run_physics_sim(vxa_file)
 
         # PARSE XML OUTPUT TO EXTRACT FITNESS (NORM_FINAL_DIST)
-        fitness_file = f"{run_directory}/tempFiles/softbotsOutput--gene_{generations}_id_{individual_id}.xml"
+        fitness_file = f"{run_directory}/tempFiles/softbotsOutput--gene_{p.generation}_id_{individual_id}.xml"
         distance = get_distance_metric(fitness_file)
 
-        print(f'Generation {generations}, Robot {genome_id} distance: {distance}')
+        print(f'Generation {p.generation}, Robot {genome_id} distance: {distance}')
         results['generation'].append(p.generation)
         results['robot'].append(genome_id)
         results['distance'].append(distance)
@@ -186,10 +188,10 @@ def run(config_file):
     print('\nOutput:')
     winning_structure = []
     winner_net = neat.nn.FeedForwardNetwork.create(winner, config)
-    for x in range(grid_size):
+    for z in range(grid_size):
             for y in range(grid_size):
-                for z in range(grid_size):
-                    output = winner_net.activate((y,x,z))
+                for x in range(grid_size):
+                    output = winner_net.activate((x,y,z))
                     material = np.argmax(output)
                     winning_structure.append(material)
     winning_structure = np.array(winning_structure)

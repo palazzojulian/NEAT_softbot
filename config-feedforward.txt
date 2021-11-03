@@ -1,14 +1,14 @@
 [NEAT]
 fitness_criterion     = max
-fitness_threshold     = 30
-pop_size              = 20
+fitness_threshold     = 25
+pop_size              = 25
 reset_on_extinction   = False
 
 [DefaultGenome]
 # node activation options
 activation_default      = relu
 activation_mutate_rate  = 0.2
-activation_options      = tanh sigmoid relu identity softplus
+activation_options      = tanh sigmoid relu abs square identity softplus sin gauss hat
 
 # node aggregation options
 aggregation_default     = sum
