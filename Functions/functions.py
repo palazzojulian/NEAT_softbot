@@ -131,3 +131,158 @@ def plot_softbot(class_out, material_list, grid_size, design_is_tensor=False):
     plt.title('Design candidate')
     #ax.view_init(30,41)
     plt.show()
+
+
+
+##############################################################################################################
+
+#                             FEASIBILITY CHECKER FUNCTION
+
+##############################################################################################################
+
+def is_feasible_design(candidate_design):
+    grid_size = candidate_design.shape[0]
+    # Now go through list of functions checking each design parameter (ie. floating voxel, split robot, etc.)
+
+    def floater_check():
+        all_coords = []
+        for x in range(candidate_design.shape[0]):
+            for y in range(candidate_design.shape[1]):
+                for z in range(candidate_design.shape[2]):
+                    all_coords.append([x,y,z])
+
+        non_zero = np.where(candidate_design != 0)
+        non_zero = list(zip(*non_zero))
+        for coords in non_zero:
+            top_layer, bottom_layer = False, False
+            x,y,z = coords[0], coords[1], coords[2]
+            surrounding_coords = [[x-1,y,z], [x+1,y,z], [x,y-1,z], [x,y+1,z], [x,y,z-1], [x,y,z+1]]
+            surrounding_coords = [x for x in surrounding_coords if x in all_coords]
+            surrounding_voxels = [candidate_design[x,y,z] for x,y,z in surrounding_coords] 
+            if sum(surrounding_voxels) == 0:
+                # print(f"Floating Voxel detected at [{x},{y},{z}]")
+                return False
+
+        return True
+
+
+    
+
+
+    def split_check():
+        # CHECK 1
+        # Split one way (horizontally)
+        check1dict = {}
+        for sheet in range(candidate_design.shape[0]):
+            check1dict[sheet] = np.sum(candidate_design[sheet])
+        # print("Check1Dict:", check1dict)
+
+
+        # CHECK 2
+        # Split the other way (horizontally)
+        check2dict = {}
+        for row in range(candidate_design.shape[1]):
+            row_sum = 0
+            for layer in range(candidate_design.shape[0]):
+                row_sum += np.sum(candidate_design[layer, row])
+            check2dict[row] = row_sum
+        # print("Check2Dict:", check2dict)
+
+
+        # CHECK 3
+        # Split vertically (if any layer is completely empty aside from the top layer)
+        # add up each column, if colsum==0 then Fail
+        check3dict = {}
+        for z in range(candidate_design.shape[2]-1):
+            layer_sum = 0
+            for x in range(candidate_design.shape[1]):
+                for y in range(candidate_design.shape[2]):
+                    layer_sum += candidate_design[x,y,z]
+            check3dict[z] = layer_sum
+        # print("Check3Dict:", check3dict)
+
+        def dict_checker(check_dict):
+            for x, c in check_dict.items():
+                if check_dict[0] == 0:
+                    # print("Empty bottom layer.")
+                    return False
+                while c == 0 and x != (len(check_dict)-1):
+                    x += 1
+                    c = check_dict[x]
+                    if c != 0:
+                        return False
+                    elif x == (len(check_dict)-1):
+                        return True
+            return True
+                        
+        results = [dict_checker(x) for x in [check1dict, check2dict, check3dict]]
+        # print(results)
+        if not all(results):
+            return False
+        else:
+            return True
+
+
+
+    # Feasibility Check function calls
+    checks = {"floater check" : floater_check(), 
+                "split check" : split_check()
+                } # add function calls here
+    # print(checks)
+    if all(checks.values()) == True:
+        # print("All checks passed.")
+        return True, None
+    else:
+        failed_checks = [name for name, func in checks.items() if func == False]
+        # print(f"Feasibility Check Failed.\nFailed Checks: {failed_checks}")
+        return False, failed_checks
+
+
+
+
+
+
+
+
+##############################################################################################################
+
+#                              PENALTY/DIVERSITY/LEANNESS FUNCTION
+
+##############################################################################################################
+
+
+
+
+def diversity_adjustment(candidate_design, material_list):
+    material_counts = {x.id:0 for x in material_list}
+    material_counts[0] = 0 # add empty voxel key
+    candidate = candidate_design.reshape(-1)
+
+    for x in candidate:
+        material_counts[x] += 1
+
+    material_penalties = {x:x/max(material_counts.keys()) for x in sorted(material_counts.keys())}
+    material_penalties[4] = 0.95
+    # print("COUNTS:",material_counts)
+    # print("PENALTIES:",material_penalties)
+
+    penalties = {k:material_counts[k]*material_penalties[k] for k in material_counts} #  multiply values between dictionaries for each key
+
+    penalty = 1 - (sum(penalties.values())/len(candidate))
+
+    # print(penalties,penalty)
+
+    return penalty
+
+
+
+
+
+
+
+
+
+
+
+
+

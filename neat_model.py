@@ -2,7 +2,7 @@ from matplotlib.pyplot import grid
 from Classes.environment import Env
 from Classes.materials import Material
 from Classes.simulator import Sim
-from Functions.functions import write_voxelyze_file, run_physics_sim, get_distance_metric, plot_softbot
+from Functions.functions import diversity_adjustment, write_voxelyze_file, run_physics_sim, get_distance_metric, plot_softbot, is_feasible_design
 import neat
 import subprocess as sub
 import lxml
@@ -94,7 +94,7 @@ import numpy as np
 import pandas as pd
 
 grid_size = 6
-results = {'generation':[], 'robot':[],'distance':[], 'structure':[]}
+results = {'generation':[], 'robot':[],'distance':[], 'structure':[], 'is_feasible_design': []}
 # generations = 0
 def eval_genomes(genomes, config):
     global generations, results
@@ -117,51 +117,70 @@ def eval_genomes(genomes, config):
                     output = net.activate((x,y,z))
                     material = np.argmax(output)
                     robot_structure.append(material)
-                    # print(material)
         
         robot_structure = np.array(robot_structure)
         candidate_design = robot_structure.reshape(grid_size, grid_size, grid_size) # CANDIDATE DESIGN TO WRITE .VXA FILE 
-        # print(candidate_design)
 
 
-        # NOW WRITE .VXA FILE AND RUN SIM
-        # generations = 0
- 
+         # FEASIBILITY CHECK
 
-        # vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{generations}_id_{individual_id}.vxa"
-
-        # create .vxa file for simulator
-        vxa_file = write_voxelyze_file(sim, 
-                            env, 
-                            generations = p.generation, 
-                            individual_id = genome_id, 
-                            candidate_design = candidate_design,
-                            im_size = grid_size, 
-                            run_directory = run_directory,
-                            run_name = run_name,
-                            material_list = material_list)
-        
-        
-        vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{p.generation}_id_{genome_id}.vxa"
+        feasible = is_feasible_design(candidate_design)
+        if not feasible[0]:
+            print(feasible)
+            failed_checks = feasible[1]
+            print(f"Generation {p.generation}, Robot {genome_id}, Failed Checks: {failed_checks}")
+            results['generation'].append(p.generation)
+            results['robot'].append(genome_id)
+            results['distance'].append("NA")
+            results['structure'].append(robot_structure)
+            results['is_feasible_design'].append(failed_checks)
+            genome.fitness = 0
+            individual_id += 1
+            
 
 
-        # run physics simulator
-        run_physics_sim(vxa_file)
+        else:
 
-        # PARSE XML OUTPUT TO EXTRACT FITNESS (NORM_FINAL_DIST)
-        fitness_file = f"{run_directory}/tempFiles/softbotsOutput--gene_{p.generation}_id_{individual_id}.xml"
-        distance = get_distance_metric(fitness_file)
+            # vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{generations}_id_{individual_id}.vxa"
 
-        print(f'Generation {p.generation}, Robot {genome_id} distance: {distance}')
-        results['generation'].append(p.generation)
-        results['robot'].append(genome_id)
-        results['distance'].append(distance)
-        results['structure'].append(robot_structure)
+            # WRITE .VXA FILE FOR SIMULATOR
+            vxa_file = write_voxelyze_file(sim, 
+                                env, 
+                                generations = p.generation, 
+                                individual_id = genome_id, 
+                                candidate_design = candidate_design,
+                                im_size = grid_size, 
+                                run_directory = run_directory,
+                                run_name = run_name,
+                                material_list = material_list)
+            
+            
+            vxa_file = f"{run_directory}/voxelyzeFiles/{run_name}--gene_{p.generation}_id_{genome_id}.vxa"
 
-        # EVALUATE FITNESS
-        genome.fitness += distance
 
-        individual_id +=1
+            # RUN PHYSICS SIMULATOR
+            run_physics_sim(vxa_file)
+
+            # PARSE XML OUTPUT TO EXTRACT FITNESS (NORM_FINAL_DIST)
+            fitness_file = f"{run_directory}/tempFiles/softbotsOutput--gene_{p.generation}_id_{individual_id}.xml"
+            distance = get_distance_metric(fitness_file)
+
+            print(f'Generation {p.generation}, Robot {genome_id} distance: {distance}')
+            results['generation'].append(p.generation)
+            results['robot'].append(genome_id)
+            results['distance'].append(distance)
+            results['structure'].append(robot_structure)
+            results['is_feasible_design'].append("YES")
+
+            # EVALUATE FITNESS
+            genome.fitness += abs(distance)
+
+            # DIVERSITY ADJUSTMENT
+            adjustment = diversity_adjustment(candidate_design, material_list)
+            genome.fitness *= adjustment
+            print("ROBOT {} DISTANCE {}. DIVERSITY ADJUSTMENT: {}.".format(individual_id, abs(distance), adjustment))
+
+            individual_id +=1
 
     df = pd.DataFrame().from_dict(results)
     df.to_csv('Simulation Results.csv')
@@ -230,7 +249,6 @@ if __name__ == '__main__':
     start_time = time.time()
     run(config_path)
     print(f"Total Runtime: {round(time.time()-start_time)} seconds.")
-
 
 
 
